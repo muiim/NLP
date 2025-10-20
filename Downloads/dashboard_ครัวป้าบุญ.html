@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dashboard รีวิว - ครัวป้าบุญ</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root{--accent:#66CCFF}
+    body{font-family: 'Kanit', sans-serif;background:linear-gradient(180deg,#f8feff 0%, #f0fbff 100%)}
+    .card{background:white;border-radius:16px;box-shadow:0 6px 18px rgba(14,76,110,0.06)}
+    .badge-pos{background:#d1f7e0;color:#006b2e;padding:4px 8px;border-radius:999px;font-weight:600}
+    .badge-neg{background:#fde2e2;color:#8b1c1c;padding:4px 8px;border-radius:999px;font-weight:600}
+    .badge-neu{background:#fff4cc;color:#8a5b00;padding:4px 8px;border-radius:999px;font-weight:600}
+    textarea {font-family: inherit}
+  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body class="p-6">
+  <div class="max-w-7xl mx-auto">
+    <header class="flex items-center justify-between mb-6">
+      <div class="flex items-center gap-4">
+        <div class="w-14 h-14 rounded-lg bg-gradient-to-br from-[var(--accent)] to-[#9fe6ff] flex items-center justify-center text-white font-bold text-xl">ปบ</div>
+        <div>
+          <h1 class="text-2xl font-semibold">Dashboard รีวิว - ครัวป้าบุญ</h1>
+          <p class="text-sm text-slate-600 mt-1">สรุปความเห็นจากไฟล์ CSV — ดูการคาดการณ์ SVM เทียบกับป้ายกำกับจริง</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <label class="px-4 py-2 bg-white card rounded-lg cursor-pointer shadow-sm">
+          <input id="fileInput" type="file" accept="text/csv" class="hidden" />
+          อัปโหลด CSV
+        </label>
+        <button id="sampleBtn" class="px-4 py-2 rounded-lg" style="background:var(--accent);color:#004b63">โหลดตัวอย่าง</button>
+      </div>
+    </header>
+
+    <main class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- left column -->
+      <section class="col-span-2 space-y-6">
+        <div class="card p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-semibold">ภาพรวมข้อมูล</h2>
+            <div class="text-sm text-slate-600">Rows: <span id="rowCount">0</span></div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="p-4 border rounded-lg">
+              <div class="text-sm text-slate-500">Accuracy</div>
+              <div id="accuracy" class="text-2xl font-bold mt-1">-</div>
+            </div>
+            <div class="p-4 border rounded-lg">
+              <div class="text-sm text-slate-500">Precision (avg)</div>
+              <div id="precision" class="text-2xl font-bold mt-1">-</div>
+            </div>
+            <div class="p-4 border rounded-lg">
+              <div class="text-sm text-slate-500">Recall (avg)</div>
+              <div id="recall" class="text-2xl font-bold mt-1">-</div>
+            </div>
+          </div>
+
+          <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            <div class="p-2 card">
+              <canvas id="distChart" height="220"></canvas>
+            </div>
+            <div class="p-2 card">
+              <h3 class="text-sm font-medium mb-2">Confusion Matrix</h3>
+              <table class="w-full text-center border-collapse">
+                <thead>
+                  <tr>
+                    <th></th>
+                    <th class="py-2">pred: positive</th>
+                    <th class="py-2">pred: neutral</th>
+                    <th class="py-2">pred: negative</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="font-medium py-2">true: positive</td>
+                    <td id="cm_pp" class="py-3">0</td>
+                    <td id="cm_pn" class="py-3">0</td>
+                    <td id="cm_pr" class="py-3">0</td>
+                  </tr>
+                  <tr>
+                    <td class="font-medium py-2">true: neutral</td>
+                    <td id="cm_np" class="py-3">0</td>
+                    <td id="cm_nn" class="py-3">0</td>
+                    <td id="cm_nr" class="py-3">0</td>
+                  </tr>
+                  <tr>
+                    <td class="font-medium py-2">true: negative</td>
+                    <td id="cm_rp" class="py-3">0</td>
+                    <td id="cm_rn" class="py-3">0</td>
+                    <td id="cm_rr" class="py-3">0</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="card p-4">
+          <h2 class="text-lg font-semibold mb-3">ตัวอย่างรีวิว (แสดง 10 รายการ)</h2>
+          <div class="space-y-2">
+            <div id="sampleList"></div>
+          </div>
+        </div>
+
+        <div class="card p-4">
+          <h2 class="text-lg font-semibold mb-3">รีวิวที่โมเดลทำนายผิด (Mismatch)</h2>
+          <div id="mismatchList" class="space-y-2 max-h-64 overflow-auto"></div>
+        </div>
+
+      </section>
+
+      <!-- right column -->
+      <aside class="space-y-6">
+        <div class="card p-4">
+          <h3 class="font-semibold mb-2">ตัวควบคุม</h3>
+          <div class="space-y-2">
+            <button id="downloadJson" class="w-full py-2 rounded-lg" style="background:var(--accent);color:#004b63">ดาวน์โหลดสรุป (JSON)</button>
+            <button id="downloadCSV" class="w-full py-2 rounded-lg border">ดาวน์โหลดสรุป (CSV)</button>
+            <button id="clearBtn" class="w-full py-2 rounded-lg border">ล้างข้อมูล</button>
+          </div>
+        </div>
+
+        <div class="card p-4">
+          <h3 class="font-semibold mb-2">คำอธิบาย</h3>
+          <ol class="text-sm text-slate-700 space-y-1">
+            <li>ไฟล์ CSV ควรมีหัวคอลัมน์: <code>ข้อความรีวิว,True_Label,SVM_Predict</code></li>
+            <li>Label ควรเป็น: <strong>positive / neutral / negative</strong></li>
+            <li>กด "โหลดตัวอย่าง" เพื่อทดสอบด้วยข้อมูลเริ่มต้น</li>
+          </ol>
+        </div>
+
+      </aside>
+    </main>
+
+    <footer class="mt-8 text-center text-sm text-slate-500">สร้างโดย Dashboard Template — ครัวป้าบุญ · ปรับแต่งต่อได้</footer>
+  </div>
+
+<script>
+// util functions
+function normalizeLabel(s){ if(!s) return 'neutral'; s = String(s).trim().toLowerCase(); if(s.startsWith('pos')) return 'positive'; if(s.startsWith('neg')) return 'negative'; if(s.startsWith('neu')) return 'neutral'; return s }
+
+let dataRows = [];
+const labels = ['positive','neutral','negative'];
+
+function computeMetrics(rows){
+  const n = rows.length;
+  if(n===0) return null;
+  // confusion matrix: true x pred
+  const cm = {};
+  labels.forEach(t=> labels.forEach(p=> cm[t+'|'+p]=0));
+  let correct=0;
+  rows.forEach(r=>{
+    const t = normalizeLabel(r.True_Label);
+    const p = normalizeLabel(r.SVM_Predict);
+    if(t===p) correct++;
+    cm[t+'|'+p] = (cm[t+'|'+p]||0)+1;
+  });
+  // per-class precision/recall
+  const precision = {}; const recall = {};
+  labels.forEach(c=>{
+    let tp = cm[c+'|'+c];
+    let predPos = labels.reduce((s,l)=>s + (cm[l+'|'+c]||0),0);
+    let actualPos = labels.reduce((s,l)=>s + (cm[c+'|'+l]||0),0);
+    precision[c] = predPos===0? 0 : tp/predPos;
+    recall[c] = actualPos===0? 0 : tp/actualPos;
+  });
+  const avgPrecision = (precision.positive+precision.neutral+precision.negative)/3;
+  const avgRecall = (recall.positive+recall.neutral+recall.negative)/3;
+  return {n,cm,accuracy: correct/n,precision,recall,avgPrecision,avgRecall}
+}
+
+function renderOverview(rows){
+  const metrics = computeMetrics(rows);
+  document.getElementById('rowCount').textContent = rows.length;
+  if(!metrics){
+    document.getElementById('accuracy').textContent = '-';
+    document.getElementById('precision').textContent = '-';
+    document.getElementById('recall').textContent = '-';
+    updateConfusionTable({});
+    updateDistChart({});
+    document.getElementById('sampleList').innerHTML='';
+    document.getElementById('mismatchList').innerHTML='';
+    return;
+  }
+  document.getElementById('accuracy').textContent = (metrics.accuracy*100).toFixed(2)+'%';
+  document.getElementById('precision').textContent = (metrics.avgPrecision*100).toFixed(2)+'%';
+  document.getElementById('recall').textContent = (metrics.avgRecall*100).toFixed(2)+'%';
+  updateConfusionTable(metrics.cm);
+  updateDistChart(metrics.cm);
+  renderSamples(rows);
+  renderMismatches(rows);
+}
+
+function updateConfusionTable(cm){
+  // fill zeros if missing
+  labels.forEach(t=> labels.forEach(p=> cm[t+'|'+p] = cm[t+'|'+p]||0));
+  const map = {
+    'cm_pp':'positive|positive','cm_pn':'positive|neutral','cm_pr':'positive|negative',
+    'cm_np':'neutral|positive','cm_nn':'neutral|neutral','cm_nr':'neutral|negative',
+    'cm_rp':'negative|positive','cm_rn':'negative|neutral','cm_rr':'negative|negative'
+  };
+  for(const id in map){ const key = map[id]; document.getElementById(id).textContent = cm[key] }
+}
+
+let distChartInstance = null;
+function updateDistChart(cm){
+  const counts = labels.map(l=> labels.reduce((s,p)=> s + (cm[l+'|'+p]||0),0)); // true counts
+  const ctx = document.getElementById('distChart');
+  if(distChartInstance) { distChartInstance.data.labels = labels; distChartInstance.data.datasets[0].data = counts; distChartInstance.update(); return }
+  distChartInstance = new Chart(ctx,{
+    type:'bar',
+    data:{ labels: labels.map(l=> l.charAt(0).toUpperCase()+l.slice(1)), datasets:[{ label:'จำนวนรีวิว (ตาม True_Label)', data:counts }] },
+    options:{ responsive:true, plugins:{ legend:{ display:false } }, scales:{ y:{ beginAtZero:true } } }
+  });
+}
+
+function renderSamples(rows){
+  const el = document.getElementById('sampleList'); el.innerHTML='';
+  rows.slice(0,10).forEach((r,i)=>{
+    const trueL = normalizeLabel(r.True_Label); const pred = normalizeLabel(r.SVM_Predict);
+    const div = document.createElement('div'); div.className='p-3 border rounded-lg';
+    div.innerHTML = `
+      <div class="flex justify-between items-start gap-2">
+        <div class="text-sm text-slate-700" style="white-space:pre-wrap">${escapeHtml(r['ข้อความรีวิว']||r['text']||'')}</div>
+        <div class="text-right">
+          <div class="text-xs text-slate-500">True</div>
+          <div>${labelBadge(trueL)}</div>
+          <div class="text-xs text-slate-500 mt-1">Pred</div>
+          <div>${labelBadge(pred)}</div>
+        </div>
+      </div>`;
+    el.appendChild(div);
+  })
+}
+
+function renderMismatches(rows){
+  const el = document.getElementById('mismatchList'); el.innerHTML='';
+  const mismatches = rows.filter(r => normalizeLabel(r.True_Label) !== normalizeLabel(r.SVM_Predict));
+  if(mismatches.length===0){ el.innerHTML='<div class="text-sm text-slate-500">ไม่มีรายการที่โมเดลทำนายผิด</div>'; return }
+  mismatches.forEach(r=>{
+    const div = document.createElement('div'); div.className='p-3 border rounded-lg';
+    const trueL = normalizeLabel(r.True_Label); const pred = normalizeLabel(r.SVM_Predict);
+    div.innerHTML = `
+      <div class="text-sm font-medium mb-1">${escapeHtml(r['ข้อความรีวิว']||r['text']||'')}</div>
+      <div class="flex gap-2 items-center text-sm">
+        <div>True: <span class="font-semibold">${trueL}</span></div>
+        <div>Pred: <span class="font-semibold">${pred}</span></div>
+      </div>`;
+    el.appendChild(div);
+  })
+}
+
+function labelBadge(l){ if(l==='positive') return '<span class="badge-pos">Positive</span>'; if(l==='negative') return '<span class="badge-neg">Negative</span>'; return '<span class="badge-neu">Neutral</span>' }
+
+function escapeHtml(s){ return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;') }
+
+// file handling
+const input = document.getElementById('fileInput');
+input.addEventListener('change', e => {
+  const f = e.target.files[0]; if(!f) return;
+  Papa.parse(f, { header:true, skipEmptyLines:true, complete: function(res){ dataRows = res.data; renderOverview(dataRows); } })
+});
+
+// sample data loader (basic CSV inline)
+document.getElementById('sampleBtn').addEventListener('click', ()=>{
+  const csv = `ข้อความรีวิว,True_Label,SVM_Predict
+วันนี้เด็กๆยังไม่เปิดเรียนเลยมีแผนพาครอบครัวไปทานข้าว...,positive,positive
+บรรยากาศดีมากกก มีเป็ดด้วยย อาหารอร่อย...,positive,positive
+#ร้านต้องจอด วันนี้พามาพบกับร้าน ป้าบุญคาเฟ่...,neutral,positive
+อาหารอร่อย ราคาไม่แพง สถานที่ใหญ่โต...,neutral,positive
+`;
+  Papa.parse(csv,{header:true,complete:function(res){ dataRows = res.data; renderOverview(dataRows) }})
+});
+
+// downloads
+function downloadJSON(){ const summary = {n:dataRows.length, metrics: computeMetrics(dataRows)}; const blob = new Blob([JSON.stringify(summary,null,2)],{type:'application/json'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='summary_paboon.json'; a.click(); URL.revokeObjectURL(url) }
+function downloadSummaryCSV(){ const rows = dataRows.map(r=> ({ข้อความรีวิว: r['ข้อความรีวิว'], True_Label: r['True_Label'], SVM_Predict: r['SVM_Predict']})); const header = ['ข้อความรีวิว','True_Label','SVM_Predict']; const lines = [header.join(',')].concat(rows.map(r=> header.map(h=> '"'+String(r[h]||'').replaceAll('"','""')+'"').join(','))); const blob = new Blob([lines.join('\n')],{type:'text/csv'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='summary_paboon_rows.csv'; a.click(); URL.revokeObjectURL(url) }
+
+document.getElementById('downloadJson').addEventListener('click', downloadJSON);
+document.getElementById('downloadCSV').addEventListener('click', downloadSummaryCSV);
+
+document.getElementById('clearBtn').addEventListener('click', ()=>{ dataRows=[]; renderOverview(dataRows); input.value=''; })
+
+</script>
+</body>
+</html>
